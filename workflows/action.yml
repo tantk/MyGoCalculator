@@ -1,0 +1,80 @@
+name: Go Continuous Integration Continuous Delivery
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-16.04
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2
+        with:
+        # We must fetch at least the immediate parents so that if this is
+        # a pull request then we can checkout the head.
+          fetch-depth: 2
+          
+      - run: git checkout HEAD^2
+        if: ${{ github.event_name == 'pull_request' }}
+        
+      - name: Setup go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.13.7'
+      - name: Run version check
+        run: go version
+      - name: Install Dependencies
+        id: InstallDeps
+        run: |
+          go get github.com/tebeka/go2xunit
+      - if: ${{success()}}
+        run: |
+          go get github.com/franela/goblin
+      - if: ${{success()}}
+        name: Test Go Goblin
+        run: |
+          go test -v
+          go test -v | go2xunit > report.xml            
+      - if: ${{failure()}}
+        name: Create Issues
+        uses: nashmaniac/create-issue-action@v1.1
+        with:
+          title: 
+          Failed
+          token: ${{secrets.GITHUB_TOKEN}}
+          assignees: ${{github.actor}}
+          labels: workflow-failed
+          body: Workflow failed for commit ${{github.sha}} @ ${{github.ref}}        
+      - name: Unit Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v1.5
+        if: always()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          files: report.xml
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v1
+      # Override language selection by uncommenting this and choosing your languages
+      # with:
+      #   languages: go, javascript, csharp, python, cpp, java
+
+    # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
+    # If this step fails, then you should remove it and run the build manually (see below)
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v1
+
+    # ℹ️ Command-line programs to run using the OS shell.
+    # 📚 https://git.io/JvXDl
+
+    # ✏️ If the Autobuild fails above, remove it and uncomment the following three lines
+    #    and modify them (or add more) to build your code if your project
+    #    uses a compiled language
+
+    #- run: |
+    #   make bootstrap
+    #   make release
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v1
